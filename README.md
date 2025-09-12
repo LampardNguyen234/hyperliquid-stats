@@ -7,12 +7,14 @@ A comprehensive command-line tool for fetching and analyzing Hyperliquid cryptoc
 ### Prerequisites
 
 - Go 1.24.4 or higher
+- [Golang installation guide](https://go.dev/doc/install)
 
 ### From Source
 
 ```bash
 git clone https://github.com/LampardNguyen234/hyperliquid-stats.git
 cd hyperliquid-stats
+go mod tidy
 go build -o hyperliquid-stats
 ```
 
