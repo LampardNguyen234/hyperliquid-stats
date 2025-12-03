@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/LampardNguyen234/go-rate-limiter"
 	"io"
+	"math"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
@@ -18,15 +21,22 @@ type Client struct {
 	baseURL    string
 	infoURL    string
 	httpClient *http.Client
+	limiter    rate.RateLimiter
 }
 
 func NewClient(baseURL, infoURL string) *Client {
+	limiter, _ := rate.NewMultipleLimiter(
+		rate.NewLimiter(time.Minute, 300),
+		rate.NewLimiter(100*time.Millisecond, 3),
+	)
+
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		infoURL: strings.TrimRight(infoURL, "/"),
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		limiter: limiter,
 	}
 }
 
@@ -130,6 +140,10 @@ func (c *Client) FetchAllVault() (Vaults, error) {
 }
 
 func (c *Client) FetchVaultVolume(vaultAddress string) (VaultVolume, error) {
+	if !c.limiter.Allow() {
+		return VaultVolume{}, errors.New("429: rate limit exceeded")
+	}
+
 	var result VaultVolumeResponse
 
 	payload := VaultVolumeRequest{
@@ -158,7 +172,7 @@ func (c *Client) FetchAllVaultVolumesConcurrent(hlpOnly bool, count int, workers
 		return nil, errors.Wrap(err, "failed to fetch vaults")
 	}
 
-	vaults = vaults.FilterOpenVaults().FilterByMinTVL(100).SortWithHLPPriority(false)
+	vaults = vaults.FilterOpenVaults().FilterByMinTVL(10).SortWithHLPPriority(false)
 	if count > 0 && len(vaults) > count {
 		vaults = vaults[:count+1]
 	}
@@ -203,9 +217,14 @@ func (c *Client) FetchAllVaultVolumesConcurrent(hlpOnly bool, count int, workers
 				for {
 					volume, err := c.FetchVaultVolume(vault.Data.Address)
 					if err != nil {
-						if strings.Contains(err.Error(), "429") && tmpCount < 10 {
+						if strings.Contains(err.Error(), "429") && tmpCount < 20 {
 							tmpCount++
-							time.Sleep(5 * time.Second)
+
+							t := int64(math.Min(float64(workers/2+1), 5)) * int64(time.Second)
+							rand.NewSource(time.Now().Unix())
+							t += rand.Int63() % t / 2
+
+							time.Sleep(time.Duration(t))
 							continue
 						}
 						errorChan <- errors.Wrapf(err, "failed to fetch volume for vault %s", vault.Data.Address)

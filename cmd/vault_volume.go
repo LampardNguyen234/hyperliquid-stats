@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/LampardNguyen234/hyperliquid-stats/internal/api"
 	"github.com/spf13/cobra"
@@ -17,6 +18,7 @@ var vaultVolumeCmd = &cobra.Command{
     
 This command retrieves volume data for all vaults or a specific vault by address.
 Volume data includes day, week, month, and all-time statistics for both regular and perpetual trading.
+Additionally displays the last 7 days of daily volume data for context.
 Results are sorted by HLP priority first, then by the specified field descending.
 Use --hlp flag to show only HLP vault volumes.
 Use --count flag to limit the number of vaults displayed.
@@ -46,6 +48,9 @@ Use --summary flag to display aggregated totals and top 10 vaults by TVL.`,
 			}
 
 			fmt.Println(volume.FormatSingle(vaultName, address))
+
+			// Fetch and display last 7 days daily volume
+			fetchAndDisplayDailyVolume(client)
 		} else {
 			// Get count for display limiting
 			count, _ := cmd.Flags().GetInt("count")
@@ -66,6 +71,8 @@ Use --summary flag to display aggregated totals and top 10 vaults by TVL.`,
 			summaryMode, _ := cmd.Flags().GetBool("summary")
 			if summaryMode {
 				fmt.Println(volumes.FormatSummary())
+				// Fetch and display last 7 days daily volume
+				fetchAndDisplayDailyVolume(client)
 			} else {
 				// Apply sorting by specified field
 				sortBy, _ := cmd.Flags().GetString("sort-by")
@@ -85,4 +92,31 @@ func init() {
 	vaultVolumeCmd.Flags().IntP("workers", "w", 5, "Number of concurrent workers for fetching vault volumes")
 	vaultVolumeCmd.Flags().String("sort-by", "tvl", "Sort results by: tvl, day, week, month, all-time (HLP vaults always first)")
 	vaultVolumeCmd.Flags().Bool("summary", false, "Display summary of vault volumes (totals by HLP/non-HLP and top 10 TVL)")
+}
+
+// fetchAndDisplayDailyVolume fetches and displays the last 7 days of daily volume data
+func fetchAndDisplayDailyVolume(client *api.Client) {
+	// Calculate date range for last 7 days
+	now := time.Now()
+	fromDate := now.AddDate(0, 0, -7) // 7 days ago
+	toDate := now
+
+	// Fetch daily volume data
+	dailyVolumes, err := client.FetchDailyVolume(&fromDate, &toDate)
+	if err != nil {
+		log.Printf("Warning: Failed to fetch daily volume data: %v", err)
+		return
+	}
+
+	if len(dailyVolumes) == 0 {
+		fmt.Println("\nNo daily volume data available for the last 7 days.")
+		return
+	}
+
+	// Sort by time descending (most recent first)
+	dailyVolumes = dailyVolumes.SortByTime(true)
+
+	// Display the daily volume data
+	fmt.Printf("\n=== LAST 7 DAYS DAILY VOLUME ===\n")
+	fmt.Println(dailyVolumes.FormatString(7))
 }

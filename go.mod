@@ -3,6 +3,7 @@ module github.com/LampardNguyen234/hyperliquid-stats
 go 1.24.4
 
 require (
+	github.com/LampardNguyen234/go-rate-limiter v0.0.1-alpha
 	github.com/olekukonko/tablewriter v1.0.9
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.10.1
